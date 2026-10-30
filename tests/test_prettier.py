@@ -3,7 +3,7 @@ import os
 import string
 from collections import Counter, OrderedDict
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib.util import find_spec
 from typing import Any, ClassVar, NamedTuple, cast
 from unittest.mock import MagicMock
@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from devtools.ansi import strip_ansi
-from devtools.prettier import PrettyFormat, pformat, pprint
+from devtools.prettier import MISSING, PrettyFormat, pformat, pprint
 
 
 class Foobar(NamedTuple):
@@ -420,6 +420,62 @@ WeakSlots(
     first=123,
 )"""
     )
+
+
+def test_slotted_dataclass_unassigned_inherited_field():
+    @dataclass(slots=True)
+    class Base:
+        pending: int = field(init=False, repr=False)
+
+    @dataclass(slots=True)
+    class Child(Base):
+        ready: int = field(default=42, repr=False)
+
+    value = Child()
+    assert pformat(value) == 'Child(\n    ready=42,\n)'
+    value.pending = 7
+    assert pformat(value) == 'Child(\n    pending=7,\n    ready=42,\n)'
+
+
+def test_slotted_dataclass_unassigned_leaf_field():
+    @dataclass(slots=True)
+    class Value:
+        pending: int = field(init=False, repr=False)
+        ready: int = field(default=42, repr=False)
+
+    assert pformat(Value()) == 'Value(\n    ready=42,\n)'
+
+
+def test_slotted_dataclass_stored_missing_sentinel():
+    @dataclass(slots=True)
+    class Base:
+        first: Any
+
+    @dataclass(slots=True)
+    class Child(Base):
+        second: Any
+
+    assert pformat(Child(MISSING, MISSING)) == f'Child(\n    first={MISSING!r},\n    second={MISSING!r},\n)'
+
+
+def test_slotted_dataclass_field_read_once():
+    reads: list[str] = []
+
+    @dataclass(slots=True)
+    class Base:
+        pending: int = field(init=False, repr=False)
+
+        def __getattribute__(self, name: str) -> Any:
+            if name in {'pending', 'ready'}:
+                reads.append(name)
+            return object.__getattribute__(self, name)
+
+    @dataclass(slots=True)
+    class Child(Base):
+        ready: int = field(default=42, repr=False)
+
+    assert pformat(Child()) == 'Child(\n    ready=42,\n)'
+    assert reads == ['pending', 'ready']
 
 
 @pytest.mark.skipif(find_spec('numpy') is None, reason='numpy not installed')

@@ -272,7 +272,12 @@ class PrettyFormat:
             field_names = dict.fromkeys(
                 [field.name for field in fields(value) if field.name not in slot_names] + list(slot_names)
             )
-            field_items = ((name, getattr(value, name)) for name in field_names)
+            missing = object()
+            field_items = (
+                (name, field_value)
+                for name in field_names
+                if (field_value := getattr(value, name, missing)) is not missing
+            )
         self._format_fields(value, field_items, indent_current, indent_new)
 
     def _format_sqlalchemy_class(self, value: Any, _: str, indent_current: int, indent_new: int) -> None:
